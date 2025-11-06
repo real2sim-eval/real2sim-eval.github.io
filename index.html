@@ -1,0 +1,802 @@
+<!DOCTYPE html>
+<html>
+
+<head>
+  <meta charset="utf-8">
+  <meta name="description"
+    content="Real-to-Sim Robot Policy Evaluation with Gaussian Splatting Simulation of Soft-Body Interactions.">
+  <meta name="keywords" content="">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Real-to-Sim Robot Policy Evaluation with Gaussian Splatting Simulation of Soft-Body Interactions</title>
+
+  <link href="https://fonts.googleapis.com/css?family=Google+Sans|Noto+Sans|Castoro" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css?family=Roboto:400,500,700&subset=latin-ext" rel="stylesheet">
+
+  <link rel="stylesheet" href="./static/css/bulma.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-carousel.min.css">
+  <link rel="stylesheet" href="./static/css/bulma-slider.min.css">
+  <link rel="stylesheet" href="./static/css/fontawesome.all.min.css">
+  <link rel="stylesheet" href="./src/select.css">
+  <link rel="stylesheet" href="./src/app.css">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/jpswalsh/academicons@1/css/academicons.min.css">
+  <link rel="stylesheet" href="./static/css/index.css">
+
+  <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.5.1/jquery.min.js"></script>
+  <script defer src="./static/js/fontawesome.all.min.js"></script>
+  <script src="./static/js/bulma-carousel.min.js"></script>
+  <script src="./static/js/bulma-slider.min.js"></script>
+  <script src="./static/js/index.js"></script>
+  <script src="./src/select.js"></script>
+  <script src="./src/video_comparison.js"></script>
+
+  <style>
+    hr {
+      border: 0;
+      height: 1px;
+      margin: 24px 0;
+      background-image: linear-gradient(to right,
+          rgba(0, 0, 0, 0),
+          rgba(0, 0, 0, 0.75),
+          rgba(0, 0, 0, 0));
+    }
+
+    button {
+      display: block;
+      margin: 20px auto;
+      padding: 10px 24px;
+      font-size: 16px;
+      font-family: sans-serif;
+      background-color: #f5f5f5;
+      color: #333;
+      border: 1px solid #ccc;
+      border-radius: 8px;
+      box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+      transition: background-color 0.2s, box-shadow 0.2s;
+    }
+
+    button:hover {
+      background-color: #eaeaea;
+      box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
+    }
+
+    /* Gaussian viewer styles */
+    #gs-viewer {
+      width: 100%;
+      max-width: 1200px;        /* change this if you want bigger */
+      aspect-ratio: 16 / 9;    /* force 16:9 */
+      margin: 1rem auto;
+      position: relative;      /* needed so child canvas can fill */
+    }
+
+    /* white card w/ soft drop shadow */
+    .shadow-card {
+      width: 100%;
+      max-width: 1200px;
+      aspect-ratio: 16 / 9;
+      margin: 1rem auto;
+      position: relative;             /* needed for ::after */
+      background: #fff;               /* white card like your second image */
+      border-radius: 18px;
+      box-shadow:
+        0 24px 40px rgba(0,0,0,.08),
+        0 6px 16px rgba(0,0,0,.06);
+      overflow: hidden;               /* round the canvas corners */
+    }
+
+    /* make the canvas fill and inherit rounding */
+    #gs-viewer canvas {
+      width: 100% !important;
+      height: 100% !important;
+      display: block;
+      border-radius: inherit;
+    }
+
+    /* feathered “ground” shadow below the card */
+    .shadow-card::after {
+      content: "";
+      position: absolute;
+      left: 10%;
+      right: 10%;
+      bottom: -16px;                  /* push just below the card */
+      height: 34px;
+      pointer-events: none;
+      background: radial-gradient(ellipse closest-side,
+                  rgba(0,0,0,.20) 0%,
+                  rgba(0,0,0,.12) 35%,
+                  rgba(0,0,0,0) 75%);
+      filter: blur(8px);
+      opacity: .55;
+    }
+  </style>
+
+  <style>
+    .video-pair { display: grid; gap: 12px; }
+    @media (min-width: 768px) { .video-pair { grid-template-columns: 1fr 1fr; } }
+    .video-pair figure { margin: 0; }
+    .video-pair figcaption { text-align: center; font-size: 14px; opacity: 0.85; margin-top: 6px; }
+    details.box { padding: 0.75rem 1rem; }
+    details summary { cursor: pointer; list-style: none; }
+    details summary::-webkit-details-marker { display: none; }
+  </style>
+
+
+  <!-- Import map for Three.js + Spark -->
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdnjs.cloudflare.com/ajax/libs/three.js/0.174.0/three.module.js",
+      "@sparkjsdev/spark": "https://sparkjs.dev/releases/spark/0.1.8/spark.module.js"
+    }
+  }
+  </script>
+</head>
+
+<body>
+
+  <nav class="navbar" role="navigation" aria-label="main navigation">
+    <div class="navbar-brand">
+      <a role="button" class="navbar-burger" aria-label="menu" aria-expanded="false">
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+        <span aria-hidden="true"></span>
+      </a>
+    </div>
+    <div class="navbar-menu">
+      <div class="navbar-start" style="flex-grow: 1; justify-content: center;">
+        <a class="navbar-item" href="">
+        <span class="icon">
+            <i class="fas fa-home"></i>
+        </span>
+        </a>
+        <div class="navbar-item has-dropdown is-hoverable">
+          <a class="navbar-link">
+            More Research
+          </a>
+          <div class="navbar-dropdown">
+            <a class="navbar-item" href="https://jianghanxiao.github.io/phystwin-web/" target="_blank">PhysTwin</a>
+            <a class="navbar-item" href="https://kywind.github.io/pgnd" target="_blank">PGND</a>
+            <a class="navbar-item" href="https://robopil.github.io/adaptigraph/" target="_blank">AdaptiGraph</a>
+          </div>
+        </div>
+      </div>
+    </div>
+  </nav>
+
+  <section class="hero">
+    <div class="hero-body">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered">
+          <div class="column has-text-centered">
+            <h1 class="title is-1 publication-title">Real-to-Sim Robot Policy Evaluation with Gaussian Splatting Simulation of
+              Soft-Body Interactions</h1>
+            <div class="is-size-5 publication-authors">
+              <span class="author-block"><a target="_blank" href="https://kywind.github.io/">Kaifeng Zhang</a><sup>1,2*</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://www.linkedin.com/in/shuo-sha-b07527293/">Shuo Sha</a><sup>1,2*</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://jianghanxiao.github.io/">Hanxiao Jiang</a><sup>1</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://scholar.google.com/citations?user=xokChDMAAAAJ&hl=en">Matthew Loper</a><sup>2</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://scholar.google.com/citations?user=o9v0Np0AAAAJ">Hyunjung Song</a><sup>2</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://guangyancai.me/">Guangyan Cai</a><sup>2</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://drzhuoxu.github.io/">Zhuo Xu</a><sup>3</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://scholar.google.com/citations?user=-MaXMRAAAAAJ&hl=en">Xiaochen Hu</a><sup>2</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://www.cs.columbia.edu/~cxz/">Changxi Zheng</a><sup>1,2</sup></span>&nbsp;&nbsp;
+              <span class="author-block"><a target="_blank" href="https://yunzhuli.github.io/">Yunzhu Li</a><sup>1,2</sup></span>
+            </div>
+            <h3 style="text-align: center;font-size: 100%; color: #2d2e2e"> 
+              <sup>1</sup> Columbia University &nbsp;
+              <sup>2</sup> SceniX Inc. &nbsp;
+              <sup>3</sup> Google DeepMind<br>
+              <sup>*</sup> * indicates equal contribution. Work was partially done while interning at SceniX Inc.
+            </h3> 
+            <div class="column has-text-centered">
+              <div class="publication-links">
+                <span class="link-block">
+                  <a href="https://real2sim-eval.github.io/"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-file-pdf"></i></span>
+                    <span>Paper</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://real2sim-eval.github.io/"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="ai ai-arxiv"></i></span>
+                    <span>arXiv (coming soon)</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://kywind.github.com/real2sim-eval"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fab fa-github"></i></span>
+                    <span>Code</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://real2sim-eval.github.io/"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fab fa-twitter"></i></span>
+                    <span>X/Twitter</span>
+                  </a>
+                </span>
+                <span class="link-block">
+                  <a href="https://huggingface.co/collections/shashuo0104/real-to-sim-policy-eval"
+                    class="external-link button is-normal is-rounded is-dark">
+                    <span class="icon"><i class="fas fa-database"></i></span>
+                    <span>Data&Ckpts</span>
+                  </a>
+                </span>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="hero teaser">
+    <div class="container is-max-widescreen">
+      <h2 class="subtitle has-text-centered" style="font-size: 24px;">
+          <strong>Policy evaluation</strong> in sim environments constructed from real world, using
+          <strong>Gaussian Splatting</strong> for rendering and 
+          <strong>soft-body digital twin</strong> for dynamics.
+        </h2>
+      <div class="hero-body">
+        <div class="columns is-vcentered  is-centered">
+          <img src='./files/teaser.png'>
+        </div>
+      </div>
+    </div>
+
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Interactive Gaussian Visualization</h2>
+      <!-- <p class="has-text-justified">
+        We provide an interactive visualization of the reconstructed GS of the scene. The GS is already color-aligned, and showing the robot manipulating a rope which is simulated using PhysTwin after physics optimization. To reduce browser load, we only show a portion of the entire GS covering the center part of the scene. 
+        (Best viewed on desktop; drag to rotate; hide if not loading correctly or slowing down page response.)
+      </p> -->
+      <h2 class="title is-5 section-title has-text-centered" style="color: rgb(169, 169, 169);">Reconstructed GS simulation environment. Best viewed on computers.</h2>
+    </div>
+
+    <div class="container is-max-widescreen">
+      <button onclick="toggleGSView()" id="expand-btn">Click to hide interactive visualization</button>
+      <div id="gs-box-select" class="field" style="max-width:1200px;margin:0.5rem auto 0;">
+        <label class="label" style="font-weight:600; font-size:20px">Choose task</label>
+        <div class="control">
+          <div class="select is-fullwidth">
+            <select id="gs-task-select" aria-label="Select interactive task">
+              <option value="toy" selected>Toy packing</option>
+              <option value="rope">Rope routing</option>
+              <option value="tblock">T-block pushing</option>
+            </select>
+          </div>
+        </div>
+      </div>
+      
+      <div id="gs-status" style="text-align:center;font-size:0.95rem;opacity:0.75;"></div>
+      <div id="gs-viewer" class="shadow-card" aria-label="3D Gaussian Splatting Viewer"></div>
+    </div>
+
+    <br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Teleoperation in Sim</h2>
+      <h2 class="title is-5 section-title has-text-centered" style="color: rgb(169, 169, 169);">The reconstructed environment can be controlled with keyboard and puppeteer arms, with online rendering.</h2>
+      <div class="column has-text-centered">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/teleop-keyboard.mp4" width="49%" style="border-radius:10px;"></video>
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/teleop-gello.mp4" width="49%" style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">Teleoperation in sim with keyboard (left) and GELLO (right). Videos 5x speed.</p>
+      </div>
+      <br>
+    </div>
+
+  </section>
+
+  <section class="hero is-light is-small">
+    <div class="hero-body">
+      <div class="container is-max-widescreen">
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-full-width">
+            <h2 class="title is-3 section-title">Abstract</h2>
+            <div class="content has-text-justified">
+              <p>
+                Robotic manipulation policies are advancing rapidly,
+                but their direct evaluation in the real world remains costly,
+                time-consuming, and difficult to reproduce, particularly for
+                tasks involving deformable objects. Simulation provides a scalable
+                and systematic alternative, yet existing simulators often fail to
+                capture the coupled visual and physical complexity of soft-body
+                interactions. We present a real-to-sim policy evaluation framework
+                that constructs soft-body digital twins from real-world videos
+                and renders robots, objects, and environments with photorealistic
+                fidelity using 3D Gaussian Splatting. We validate our approach on
+                representative deformable manipulation tasks, including plush toy
+                packing, rope routing, and T-block pushing, demonstrating that
+                simulated rollouts correlate strongly with real-world execution
+                performance and reveal key behavioral patterns of learned policies.
+                Our results suggest that combining physics-informed reconstruction
+                with high-quality rendering enables reproducible, scalable, and
+                accurate evaluation of robotic manipulation policies.
+              </p>
+            </div>
+          </div>
+        </div>
+        <div class="columns is-centered has-text-centered">
+          <div class="column is-full-width">
+            <h2 class="title is-3 section-title">Video</h2>
+            <video controls loop playsinline height="100%" style="border-radius:10px;">
+              <source src="./files/final.mp4" type="video/mp4">
+            </video>
+            <p>
+              (Video has sound.)
+            </p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </section>
+
+
+  <section class="section">
+
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Method Overview</h2>
+      <div class="content has-text-justified">
+        <p>
+          We present a pipeline that evaluates real-world robot policies in simulation using Gaussian Splatting-based rendering and soft-body digital twins.
+        </p>
+      </div>
+      <div class="columns is-centered has-text-centered">
+        <div class="column is-fullwidth">
+          <img src='./files/method.png'>
+          <br>
+        </div>
+      </div>
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Color Alignment</h2>
+      <div class="content has-text-justified">
+        <p>
+          To close the color gap, we optimize a color transformation that aligns GS colors to the real camera domain. 
+          We show the side-by-side comparison between the renderings before transformation (raw GS colors) and after transformation (aligned with real cameras).
+        </p>
+      </div>
+      <div class="video-compare-container" id="ours" style="width: 60%;">
+        <video class="video" id="demo_video"
+              loop playsinline autoplay muted
+              src="files/color_calibrate.mp4"
+              onplay="resizeAndPlay(this)">
+        </video>
+        <canvas class="videoMerge" id="demo_videoMerge"></canvas>
+      </div>
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Physics Optimization</h2>
+      <div class="content has-text-justified">
+        <p>
+          To close the dynamics gap, we optimize the physical parameters of the soft-body digital twin to better match real-world behavior.
+          We show the side-by-side comparison between the simulated results before optimization (w/o physics optimization) and after optimization (w/ physics optimization), along with the real-world ground truth.
+          All three videos are generated using the same robot trajectory.
+          We can see that physics optimization significantly improves the alignment between simulation and reality.
+        </p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/phys-concat-sloth.mp4" width="100%" style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">Toy packing - w/o physics optimization (left) vs. w/ physics optimization (middle) vs. real world (right)</p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/phys-concat-rope.mp4" width="100%" style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">Rope routing - w/o physics optimization (left) vs. w/ physics optimization (middle) vs. real world (right)</p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/phys-concat-T.mp4" width="100%" style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">T-block pushing - w/o physics optimization (left) vs. w/ physics optimization (middle) vs. real world (right)</p>
+      </div>
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Closed-Loop Policy Evaluation</h2>
+      <div class="content has-text-justified">
+        <p>
+          Finally, we can evaluate policy performance in a closed-loop fashion by taking the observations from the simulator. As shown in the videos, when running the same policy from the same initial state, our simulation framework can closely replicate the real-world outcomes.
+        </p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/concat-toy.mp4" width="100%" style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">Toy packing - sim vs. real policy rollout</p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/concat-rope.mp4" width="100%"
+          style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">Rope routing - sim vs. real policy rollout</p>
+      </div>
+      <div class="column">
+        <video class="center" playsinline autoplay loop controls muted
+          src="./files/concat-T.mp4" width="100%"
+          style="border-radius:10px;"></video>
+        <p style="text-align: center; font-size: 18px">T-block pushing - sim vs. real policy rollout</p>
+      </div>
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Quantitative Results</h2>
+      <div class="columns is-centered has-text-centered">
+        <div class="column" style="max-width: 1000px;">
+          <img src='./files/corr.png'>
+        </div>
+      </div>
+      <div class="content has-text-justified">
+        <p>
+          In the figure above, we show the correlation between simulation and real-world policy performance. Left: Simulation success rates (y-axis) vs. real-world
+          success rates (x-axis) for toy packing, rope routing, and T-block pushing, across multiple state-of-the-art imitation learning policies and
+          checkpoints. The tight clustering along the diagonal indicates that, even with binary success metrics, our simulator faithfully reproduces
+          real-world behaviors across tasks and policy robustness levels. Right: Compared with IsaacLab, which models rope routing and push-T
+          tasks, our approach yields substantially stronger sim-to-real correlation, highlighting the benefit of realistic rendering and dynamics.
+        </p>
+      </div>
+      <div class="columns is-centered has-text-centered">
+        <div class="column" style="max-width: 800px;">
+          <img src='./files/curve.png'>
+        </div>
+      </div>
+      <div class="content has-text-justified">
+        <p>
+          In the figure above, we show the per-policy, per-task performance across training. 
+          x-axis: training iterations, y-axis: success rates. Simulation (blue)
+          and real-world (orange) success rates are shown across iterations.
+          Improvements in simulation consistently correspond to improvements in the real
+          world, establishing a positive correlation and demonstrating that our
+          simulator can be a reliable tool for evaluating/selecting policies.
+        </p>
+      </div>
+      
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Empirical Practice</h2>
+      <h2 class="title is-5 section-title">Evaluation Protocol</h2>
+      <div class="content has-text-justified">
+        <p>
+          Real-world evaluation of visuomotor policies is known to exhibit high variance, 
+          making it difficult to draw reliable conclusions. 
+          To reduce variance and ensure rigor in our empirical evaluation, 
+          we follow best practices suggested in [1,2]. 
+          Specifically, we first sample object initial states in simulation and render them 
+          from the same camera viewpoint as the physical setup. 
+          A real-time visualizer overlays these simulated states onto the live camera stream 
+          (yellow-shaded video, left), enabling a human operator to manually adjust the objects 
+          to match the simulated configuration. 
+          This process ensures that the initial states in simulation and reality are closely aligned.
+          After that, we run the policy in both simulation and reality to evaluate the performance.
+        </p>
+      </div>
+      <div class="columns is-centered has-text-centered">
+        <div class="column">
+          <video class="center" playsinline autoplay loop controls muted
+            src="./files/real-eval.mp4" width="100%" style="border-radius:10px;"></video>
+        </div>
+      </div>
+      <div class="content has-text-justified" style="font-size: 14px;">
+        <p>
+          [1] T. L. Team et al., A careful examination of large behavior models for multitask dexterous manipulation, arXiv preprint arXiv:2507.05331, 2025.
+          <br>
+          [2] H. Kress-Gazit et al., Robot learning as an empirical science: Best practices for policy evaluation, arXiv preprint arXiv:2409.09491, 2024.
+        </p>
+      </div>
+      <!-- Title and Description -->
+    <h2 class="title is-5 section-title">Data Distribution</h2>
+      <div class="content has-text-justified">
+        <p>
+          To better understand the data distribution used for both policy training and evaluation, 
+          we visualize the coverage of initial states in each setting. 
+          In our tasks, evaluation states are sampled to align with the training distribution, 
+          ensuring fair and consistent basis for comparison between simulation and reality. 
+        </p>
+      </div>
+
+      <!-- Initial state images -->
+      <div class="columns is-centered has-text-centered">
+        <div class="column">
+          <img src='./files/initial-coverage.png'>
+          <p style="text-align: center; font-size: 18px">Training initial state distribution</p>
+        </div>
+      </div>
+      <div class="columns is-centered has-text-centered">
+        <div class="column">
+          <img src='./files/initial-coverage-eval.png'>
+          <p style="text-align: center; font-size: 18px">Evaluation initial state distribution</p>
+        </div>
+      </div>
+
+      <p>A collage of complete training demonstrations can be found 
+        in the individual dataset links below.</p>
+      <br>
+      <details class="box">
+        <summary><strong>Toy Packing Dataset</strong></summary>
+        <div class="video-pair" style="margin-top:10px;">
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_toy_front_collage.mp4"></video>
+            <figcaption>Front cam collage</figcaption>
+          </figure>
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_toy_wrist_collage.mp4"></video>
+            <figcaption>Wrist cam collage</figcaption>
+          </figure>
+        </div>
+      </details>
+
+      <!-- Dataset B -->
+      <details class="box">
+        <summary><strong>Rope Routing Dataset</strong></summary>
+        <div class="video-pair" style="margin-top:10px;">
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_rope_front_collage.mp4"></video>
+            <figcaption>Front cam collage</figcaption>
+          </figure>
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_rope_wrist_collage.mp4"></video>
+            <figcaption>Wrist cam collage</figcaption>
+          </figure>
+        </div>
+      </details>
+
+      <!-- Dataset C -->
+      <details class="box">
+        <summary><strong>T-Block Pushing Dataset</strong></summary>
+        <div class="video-pair" style="margin-top:10px;">
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_tblock_front_collage.mp4"></video>
+            <figcaption>Front cam collage</figcaption>
+          </figure>
+          <figure>
+            <video controls playsinline muted loop preload="metadata" width="100%"
+                  src="./files/train_tblock_wrist_collage.mp4"></video>
+            <figcaption>Wrist cam collage</figcaption>
+          </figure>
+        </div>
+      </details>
+    </div>
+
+    <br><br>
+    <div class="container is-max-widescreen">
+      <h2 class="title is-3 section-title has-text-centered">Open Artifacts: Hugging Face Collection</h2>
+      <div class="content has-text-justified">
+        <p>
+          We release all artifacts required to reproduce our results in a single
+          <em>Hugging Face Collection</em>:
+          <a href="https://huggingface.co/collections/shashuo0104/real-to-sim-policy-eval" target="_blank" rel="noopener">
+            <code>shashuo0104/real-to-sim-policy-eval</code>
+          </a>.
+          The collection aggregates datasets, and policy, PhysTwin, and GS model checkpoints for all three tasks.
+      </div>
+
+      <div class="has-text-centered" style="margin: 12px 0 24px;">
+        <a class="button is-dark is-rounded"
+          href="https://huggingface.co/collections/shashuo0104/real-to-sim-policy-eval"
+          target="_blank" rel="noopener">
+          <span class="icon"><i class="fas fa-database"></i></span>
+          <span>Browse the HF Collection</span>
+        </a>
+      </div>
+    </div>
+  </section>
+
+  <section class="section" id="BibTeX">
+    <div class="container is-max-desktop content">
+      <h2 class="title is-3 section-title has-text-centered">BibTeX</h2>
+      <pre><code>
+  @misc{zhang2025realtosim,
+    title={Real-to-Sim Robot Policy Evaluation with Gaussian Splatting Simulation of Soft-Body Interactions},
+    author={Zhang, Kaifeng and Sha, Shuo and Jiang, Hanxiao and Loper, Matthew and Song, Hyunjung and Cai, Guangyan and Xu, Zhuo and Hu, Xiaochen and Zheng, Changxi and Li, Yunzhu},
+    year={2025}
+  }
+      </code></pre>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container">
+      <div class="content has-text-centered">
+      </div>
+      <div class="columns is-centered">
+        <div class="content has-text-centered">
+          <p>
+            The template is borrowed from <a href="https://github.com/nerfies/nerfies.github.io">Nerfies</a>.
+          </p>
+        </div>
+      </div>
+    </div>
+  </footer>
+
+  <!-- Gaussian Viewer Script -->
+  <script type="module">
+  import * as THREE from "three";
+  import { SplatMesh } from "@sparkjsdev/spark";
+
+  // NEW: task map + handles for selector/status
+  const TASKS = {
+    toy:    "./files/scene-toy.ply",
+    rope:   "./files/scene-rope.ply",
+    tblock: "./files/scene-T.ply",
+  };
+  const selectEl = document.getElementById("gs-task-select");
+  const statusEl = document.getElementById("gs-status");
+
+  const container = document.getElementById("gs-viewer");
+  const scene = new THREE.Scene();
+  const camera = new THREE.PerspectiveCamera(60, 1, 0.01, 1000);
+  const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true, powerPreference: "high-performance" });
+  renderer.setPixelRatio(Math.min(window.devicePixelRatio || 1, 2));
+  container.appendChild(renderer.domElement);
+
+  function fit() {
+    const rect = container.getBoundingClientRect();
+    const w = Math.max(1, Math.floor(rect.width));
+    const h = Math.floor(w * 9 / 16);  // enforce 16:9
+    renderer.setSize(w, h, false);
+    camera.aspect = w / h;
+    camera.updateProjectionMatrix();
+  }
+  fit();
+  addEventListener("resize", fit);
+
+  // after you create `container`, `renderer`, `camera`, and define fit()
+  const ro = new ResizeObserver(() => fit());
+  ro.observe(container);
+
+  const lookAt = new THREE.Vector3(0, 0.1, 0);
+  const camY = 0.22;
+  const camRadius = 0.75;
+  let t = Math.atan2(2, camRadius);
+  let sign = 1;
+  let speed = 0.0005;
+  camera.position.set(camRadius, camY, 2);
+  camera.lookAt(lookAt);
+
+  // CHANGED: mesh is dynamic now (no fixed splatURL)
+  let mesh = null;
+
+  // NEW: loader that swaps meshes & updates status
+  function loadTask(key) {
+    const url = TASKS[key];
+    if (!url) return;
+    statusEl.textContent = `Loading ${selectEl.options[selectEl.selectedIndex].text}…`;
+    // remove old
+    if (mesh) {
+      scene.remove(mesh);
+      try { mesh.dispose?.(); mesh.material?.dispose?.(); mesh.geometry?.dispose?.(); } catch {}
+      mesh = null;
+    }
+    // add new
+    mesh = new SplatMesh({ url });
+    scene.add(mesh);
+    // brief loaded message
+    requestAnimationFrame(() => {
+      statusEl.textContent = `${selectEl.options[selectEl.selectedIndex].text} loaded. Drag to rotate.`;
+      setTimeout(() => { if (statusEl.textContent.includes("loaded")) statusEl.textContent = ""; }, 1200);
+    });
+  }
+
+  // NEW: hook up the selector
+  selectEl?.addEventListener("change", () => loadTask(selectEl.value));
+
+  let dragging = false, mx = 0, my = 0;
+  container.style.cursor = "grab";
+
+  container.addEventListener("mousedown", (e) => {
+    dragging = true; mx = e.clientX; my = e.clientY; container.style.cursor = "grabbing";
+  });
+  addEventListener("mouseup", () => { dragging = false; container.style.cursor = "grab"; });
+  addEventListener("mousemove", (e) => {
+    if (!dragging || !mesh) return;
+    const dx = e.clientX - mx, dy = e.clientY - my;
+    mesh.rotation.y += dx * 0.01;
+    mesh.rotation.z += -dy * 0.01;
+    mx = e.clientX; my = e.clientY;
+  });
+
+  let touching = false;
+  container.addEventListener("touchstart", (e) => {
+    if (e.touches.length !== 1) return;
+    touching = true; mx = e.touches[0].clientX; my = e.touches[0].clientY;
+  }, { passive: true });
+  addEventListener("touchend", () => { touching = false; }, { passive: true });
+  addEventListener("touchmove", (e) => {
+    if (!touching || e.touches.length !== 1 || !mesh) return;
+    const t0 = e.touches[0];
+    const dx = t0.clientX - mx, dy = t0.clientY - my;
+    mesh.rotation.y += dx * 0.01;
+    mesh.rotation.z += -dy * 0.01;
+    mx = t0.clientX; my = t0.clientY;
+  }, { passive: true });
+
+  let raf, running = true;
+
+  function render() {
+    if (!running) return;
+    if (!dragging && !touching) {
+      if (t > Math.PI * 0.25) sign = -1;
+      if (t < -Math.PI * 0.25) sign = 1;
+      t += speed * sign;
+      camera.position.x = Math.cos(t) * camRadius;
+      camera.position.z = Math.sin(t) * camRadius;
+      camera.position.y = camY;
+      camera.lookAt(lookAt);
+    }
+    renderer.render(scene, camera);
+  }
+  (function loop(){ raf = requestAnimationFrame(loop); render(); })();
+
+  // Pause when the section is not visible
+  const io = new IntersectionObserver(([entry]) => {
+    running = entry.isIntersecting;
+  }, { threshold: 0.01 });
+  io.observe(container);
+
+  // Also pause when user hides the viewer
+  function setRunningFromDisplay() {
+    running = container.style.display !== 'none';
+  }
+
+  window.toggleGSView = function () {
+    const viewer   = document.getElementById('gs-viewer');
+    const selectEl = document.getElementById('gs-box-select');
+    const statusEl = document.getElementById('gs-status');
+    const btn      = document.getElementById('expand-btn');
+
+    const isHidden = viewer.style.display === 'none';
+
+    viewer.style.display   = isHidden ? 'block' : 'none';
+    if (selectEl) selectEl.style.display = isHidden ? 'block' : 'none';
+    if (statusEl) statusEl.style.display = isHidden ? 'block' : 'none';
+
+    btn.textContent = isHidden
+      ? 'Click to hide interactive visualization'
+      : 'Click for interactive visualization';
+
+    // resume/pause loop
+    running = viewer.style.display !== 'none';
+
+    // ⬅️ important: re-measure after it's visible
+    if (running) requestAnimationFrame(() => fit());
+  };
+
+  // Respect reduced motion
+  const prefersReduced = window.matchMedia('(prefers-reduced-motion: reduce)');
+  if (prefersReduced.matches) {
+    running = false;
+  }
+  prefersReduced.addEventListener('change', e => { running = !e.matches; });
+
+  // NEW: initial load from current selector (defaults to "toy")
+  loadTask(selectEl?.value || "toy");
+  </script>
+
+  <script>
+    document.querySelectorAll('details.box').forEach(d => {
+      d.addEventListener('toggle', () => {
+        d.querySelectorAll('video').forEach(v => {
+          if (d.open) { v.play().catch(()=>{}); } else { v.pause(); }
+        });
+      });
+    });
+  </script>
+
+</body>
+
+</html>
