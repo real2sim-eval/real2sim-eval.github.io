@@ -666,7 +666,7 @@
   let t = Math.atan2(1, camRadius);
   let sign = 1;
   let speed = 0.0005;
-  camera.position.set(camRadius, camY, 2);
+  camera.position.set(Math.cos(t) * camRadius, camY, Math.sin(t) * camRadius);
   camera.lookAt(lookAt);
 
   // CHANGED: mesh is dynamic now (no fixed splatURL)
