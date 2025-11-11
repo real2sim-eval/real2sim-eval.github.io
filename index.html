@@ -663,9 +663,9 @@
   const lookAt = new THREE.Vector3(0, 0.1, 0);
   const camY = 0.22;
   const camRadius = 0.75;
-  let t = Math.atan2(1, camRadius);
+  let t = Math.atan2(2, camRadius);
   let sign = 1;
-  let speed = 0.0005;
+  let speed = 0.001;
   camera.position.set(Math.cos(t) * camRadius, camY, Math.sin(t) * camRadius);
   camera.lookAt(lookAt);
 
@@ -730,15 +730,15 @@
 
   function render() {
     if (!running) return;
-    // if (!dragging && !touching) {
-    //   if (t > Math.PI * 0.25) sign = -1;
-    //   if (t < -Math.PI * 0.25) sign = 1;
-    //   t += speed * sign;
-    //   camera.position.x = Math.cos(t) * camRadius;
-    //   camera.position.z = Math.sin(t) * camRadius;
-    //   camera.position.y = camY;
-    //   camera.lookAt(lookAt);
-    // }
+    if (!dragging && !touching) {
+      if (t > Math.PI * 0.25) sign = -1;
+      if (t < -Math.PI * 0.25) sign = 1;
+      t += speed * sign;
+      camera.position.x = Math.cos(t) * camRadius;
+      camera.position.z = Math.sin(t) * camRadius;
+      camera.position.y = camY;
+      camera.lookAt(lookAt);
+    }
     renderer.render(scene, camera);
   }
   (function loop(){ raf = requestAnimationFrame(loop); render(); })();
